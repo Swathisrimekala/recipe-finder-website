@@ -1,423 +1,220 @@
-const searchInput = document.getElementById('searchInput');
-const recipesList = document.getElementById('recipesList');
-const modal = document.getElementById('recipeModal');
-const modalContent = document.getElementById('modalContent');
-const closeBtn = document.querySelector('.close-btn');
+// Store ingredients array
+let ingredients = [];
 
-// Replace with your Recipe Ninja API key
-const API_KEY = 'qYp0zwcp2QK4TpU8zLbyfg==RQALb3mTE2NeerX5';
-const MEAL_DB_API = 'https://www.themealdb.com/api/json/v1/1/search.php?s=';
-
-// Popular recipe categories with emojis
-const popularCategories = [
-    { name: 'Pasta', emoji: '🍝' },
-    { name: 'Chicken', emoji: '🍗' },
-    { name: 'Pizza', emoji: '🍕' },
-    { name: 'Salad', emoji: '🥗' },
-    { name: 'Soup', emoji: '🥣' },
-    { name: 'Cake', emoji: '🍰' },
-    { name: 'Curry', emoji: '🍛' },
-    { name: 'Rice', emoji: '🍚' },
-    { name: 'Fish', emoji: '🐟' },
-    { name: 'Bread', emoji: '🍞' }
-];
-
-const foodIcons = ['🍲', '🥘', '🍝', '🥗', '🍜', '🍛', '🥪', '🌮', '🍕', '🥩'];
-
-// Get random icon
-function getRandomIcon() {
-    return foodIcons[Math.floor(Math.random() * foodIcons.length)];
+// Function to validate ingredient
+function validateIngredient(ingredient) {
+    // Check if ingredient is only letters and spaces
+    return /^[a-zA-Z\s]+$/.test(ingredient);
 }
 
-// Create and add preview modal to the page
-function createPreviewModal() {
-    // First remove any existing preview modal
-    const existingModal = document.querySelector('.preview-modal');
-    if (existingModal) {
-        existingModal.remove();
-    }
+// Function to add ingredient with validation
+function addIngredient() {
+    const input = document.getElementById('ingredientInput');
+    const ingredient = input.value.trim().toLowerCase();
 
-    const modal = document.createElement('div');
-    modal.className = 'preview-modal';
-    modal.innerHTML = `
-        <div class="preview-modal-content">
-            <img src="" alt="Recipe Preview">
-            <button class="preview-close-btn">×</button>
-        </div>
-    `;
-    document.body.appendChild(modal);
-
-    // Close modal when clicking the close button
-    const closeBtn = modal.querySelector('.preview-close-btn');
-    closeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        modal.classList.remove('active');
-    });
-
-    // Close modal when clicking outside the image
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            modal.classList.remove('active');
-        }
-    });
-
-    return modal;
-}
-
-// Add necessary styles to the document
-function addPreviewModalStyles() {
-    const styleElement = document.createElement('style');
-    styleElement.textContent = `
-        .preview-modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            z-index: 1000;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .preview-modal.active {
-            display: flex;
-        }
-
-        .preview-modal-content {
-            position: relative;
-            max-width: 90%;
-            max-height: 90%;
-        }
-
-        .preview-modal img {
-            max-width: 100%;
-            max-height: 90vh;
-            object-fit: contain;
-            border-radius: 8px;
-        }
-
-        .preview-close-btn {
-            position: absolute;
-            top: -40px;
-            right: -40px;
-            background: white;
-            border: none;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            font-size: 20px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        }
-
-        .preview-btn {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-top: 8px;
-            transition: background-color 0.3s;
-        }
-
-        .preview-btn:hover {
-            background-color: #45a049;
-        }
-    `;
-    document.head.appendChild(styleElement);
-}
-
-// Show loading state
-function showLoading() {
-    recipesList.innerHTML = `
-        <div class="loading-state">
-            <div class="loading-spinner"></div>
-            <p>Brewing up some delicious recipes...</p>
-        </div>
-    `;
-}
-
-// Get recipe image from TheMealDB
-async function getRecipeImage(title) {
-    try {
-        const response = await fetch(MEAL_DB_API + encodeURIComponent(title));
-        const data = await response.json();
-        return data.meals && data.meals[0]
-            ? data.meals[0].strMealThumb
-            : '/api/placeholder/400/320';
-    } catch (error) {
-        console.error('Error fetching image:', error);
-        return '/api/placeholder/400/320';
-    }
-}
-
-// Format instructions for better readability
-function formatInstructions(instructions) {
-    if (!instructions) return '<li>No instructions available.</li>';
-
-    if (instructions.includes('|')) {
-        return instructions
-            .split('|')
-            .map(step => `<li>${step.trim()}</li>`)
-            .join('');
-    }
-
-    const steps = instructions.split(/(?<=[.!?])\s+(?=[A-Z])/);
-    return steps
-        .filter(step => step.trim())
-        .map(step => `<li>${step.trim().replace(/"/g, '')}</li>`)
-        .join('');
-}
-
-// Search recipes from Recipe Ninja API
-async function searchRecipes(query) {
-    if (!query.trim()) {
-        showWelcomeScreen();
+    if (!ingredient) {
+        showNotification('Please enter an ingredient!', 'error');
         return;
     }
 
-    showLoading();
+    if (!validateIngredient(ingredient)) {
+        showNotification('Please enter a valid ingredient (letters only)', 'error');
+        return;
+    }
 
-    try {
-        const response = await fetch(
-            'https://api.api-ninjas.com/v1/recipe?query=' + encodeURIComponent(query),
-            {
-                method: 'GET',
-                headers: {
-                    'X-Api-Key': API_KEY,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
+    if (ingredients.includes(ingredient)) {
+        showNotification('This ingredient is already in your list!', 'warning');
+        input.value = '';
+        return;
+    }
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
+    ingredients.push(ingredient);
+    updateIngredientsList();
+    input.value = '';
+    showNotification('Ingredient added successfully!', 'success');
+}
 
-        const recipes = await response.json();
+// Function to remove ingredient
+function removeIngredient(index) {
+    ingredients.splice(index, 1);
+    updateIngredientsList();
+    showNotification('Ingredient removed!', 'info');
+}
 
-        if (recipes && recipes.length > 0) {
-            await displayRecipes(recipes);
-        } else {
-            showNoResults();
-        }
-    } catch (error) {
-        console.error('Error fetching recipes:', error);
-        showError(error.message);
+// Function to clear all ingredients
+function clearIngredients() {
+    ingredients = [];
+    updateIngredientsList();
+    showNotification('All ingredients cleared!', 'info');
+}
+
+// Function to show notifications
+function showNotification(message, type) {
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    // Trigger animation
+    setTimeout(() => notification.classList.add('show'), 10);
+    
+    // Remove notification after 3 seconds
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// Function to update ingredients list display
+function updateIngredientsList() {
+    const list = document.getElementById('ingredientsList');
+    list.innerHTML = '';
+
+    ingredients.forEach((ingredient, index) => {
+        const tag = document.createElement('span');
+        tag.className = 'ingredient-tag';
+        tag.innerHTML = `
+            ${ingredient}
+            <button class="remove-ingredient" onclick="removeIngredient(${index})" 
+                    aria-label="Remove ${ingredient}">×</button>
+        `;
+        list.appendChild(tag);
+    });
+
+    // Update clear all button visibility
+    const clearButton = document.getElementById('clearAll');
+    if (clearButton) {
+        clearButton.style.display = ingredients.length ? 'block' : 'none';
     }
 }
 
-// Display recipes in the grid
-async function displayRecipes(recipes) {
-    recipesList.innerHTML = '';
-    const fragment = document.createDocumentFragment();
-    const previewModal = createPreviewModal();
+// Expanded recipe database
+const recipeDatabase = [
+    {
+        name: "Vegetable Stir-Fry",
+        ingredients: ["carrot", "broccoli", "onion", "garlic", "bell pepper"],
+        instructions: "1. Chop all vegetables\n2. Heat oil in a pan\n3. Stir-fry vegetables until tender-crisp",
+        difficulty: "Easy",
+        prepTime: "15 minutes"
+    },
+    {
+        name: "Simple Pasta",
+        ingredients: ["pasta", "tomato", "garlic", "onion", "cheese"],
+        instructions: "1. Cook pasta according to package\n2. Sauté garlic and onions\n3. Add tomatoes and cheese",
+        difficulty: "Easy",
+        prepTime: "20 minutes"
+    },
+    {
+        name: "Rice Bowl",
+        ingredients: ["rice", "egg", "carrot", "peas", "soy sauce"],
+        instructions: "1. Cook rice\n2. Scramble eggs\n3. Mix in vegetables and soy sauce",
+        difficulty: "Easy",
+        prepTime: "25 minutes"
+    },
+    {
+        name: "Vegetable Soup",
+        ingredients: ["potato", "carrot", "celery", "onion", "garlic", "vegetable broth"],
+        instructions: "1. Dice vegetables\n2. Sauté onions and garlic\n3. Add vegetables and broth\n4. Simmer until vegetables are tender",
+        difficulty: "Medium",
+        prepTime: "30 minutes"
+    },
+    {
+        name: "Salad Bowl",
+        ingredients: ["lettuce", "tomato", "cucumber", "onion", "olive oil"],
+        instructions: "1. Wash and chop vegetables\n2. Combine in bowl\n3. Dress with olive oil",
+        difficulty: "Easy",
+        prepTime: "10 minutes"
+    }
+];
 
-    for (const recipe of recipes) {
-        const imageUrl = await getRecipeImage(recipe.title);
-        const recipeElement = document.createElement('div');
-        recipeElement.className = 'recipe-card';
+// Function to find matching recipes
+function findRecipes() {
+    if (ingredients.length === 0) {
+        showNotification('Please add some ingredients first!', 'error');
+        return;
+    }
 
-        const icon = getRandomIcon();
+    const recipesSection = document.getElementById('recipesSection');
+    recipesSection.innerHTML = '<h2>Matching Recipes</h2>';
 
-        recipeElement.innerHTML = `
-            <div class="recipe-icon">${icon}</div>
-            <img src="${imageUrl}" alt="${recipe.title}" class="recipe-image">
-            <div class="recipe-info">
-                <h3>${recipe.title}</h3>
-                <p>👥 Servings: ${recipe.servings}</p>
-                <p>⭐ Rating: ${(Math.random() * 2 + 3).toFixed(1)}/5</p>
-                <button class="preview-btn">Preview Image</button>
+    const matchingRecipes = recipeDatabase.filter(recipe => {
+        const matchingIngredients = recipe.ingredients.filter(ingredient =>
+            ingredients.includes(ingredient.toLowerCase())
+        );
+        return matchingIngredients.length >= recipe.ingredients.length * 0.6;
+    });
+
+    if (matchingRecipes.length === 0) {
+        recipesSection.innerHTML += `
+            <div class="recipe-card">
+                <p>No recipes found with your ingredients. Try adding more ingredients!</p>
             </div>
         `;
-
-        // Add preview functionality
-        const previewBtn = recipeElement.querySelector('.preview-btn');
-        const modalImg = previewModal.querySelector('img');
-        
-        previewBtn.addEventListener('click', (e) => {
-            e.stopPropagation(); // Prevent recipe card click
-            modalImg.src = imageUrl;
-            previewModal.classList.add('active');
-        });
-
-        recipeElement.addEventListener('click', () => showRecipeDetails(recipe, imageUrl));
-        fragment.appendChild(recipeElement);
+        return;
     }
 
-    recipesList.appendChild(fragment);
-}
-
-// Show welcome screen with popular categories
-function showWelcomeScreen() {
-    recipesList.innerHTML = `
-        <div class="welcome-screen">
-            <h2>Welcome to Kitchen Alchemy! 🧙‍♂️</h2>
-            <p>Discover magical recipes from around the world</p>
-            
-            <div class="popular-categories">
-                <h3>Popular Categories</h3>
-                <div class="category-grid">
-                    ${popularCategories.map(category => `
-                        <div class="category-card" onclick="searchRecipes('${category.name}')">
-                            <span class="category-emoji">${category.emoji}</span>
-                            <span class="category-name">${category.name}</span>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-// Show no results message
-function showNoResults() {
-    recipesList.innerHTML = `
-        <div class="welcome-screen">
-            <h3>No recipes found 😕</h3>
-            <p>Try searching for something else</p>
-            
-            <div class="popular-categories">
-                <h3>Popular Categories</h3>
-                <div class="category-grid">
-                    ${popularCategories.map(category => `
-                        <div class="category-card" onclick="searchRecipes('${category.name}')">
-                            <span class="category-emoji">${category.emoji}</span>
-                            <span class="category-name">${category.name}</span>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-// Show error message
-function showError(message) {
-    recipesList.innerHTML = `
-        <div class="welcome-screen">
-            <h3>Oops! Something went wrong 😔</h3>
-            <p>Error: ${message}</p>
-            <button class="spoon-btn" onclick="searchInput.focus()">Try Again</button>
-            
-            <div class="popular-categories">
-                <h3>Popular Categories</h3>
-                <div class="category-grid">
-                    ${popularCategories.map(category => `
-                        <div class="category-card" onclick="searchRecipes('${category.name}')">
-                            <span class="category-emoji">${category.emoji}</span>
-                            <span class="category-name">${category.name}</span>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-// Display recipe details in modal
-function showRecipeDetails(recipe, imageUrl) {
-    modal.style.display = 'flex';
-    setTimeout(() => modal.classList.add('active'), 10);
-
-    const cookingTime = Math.floor(Math.random() * 30) + 30;
-    const difficulty = ['Easy', 'Medium', 'Hard'][Math.floor(Math.random() * 3)];
-
-    modalContent.innerHTML = `
-        <img src="${imageUrl}" alt="${recipe.title}" class="recipe-detail-image">
-        <h2>${recipe.title}</h2>
-        
-        <div class="recipe-meta">
-            <p>👥 Servings: ${recipe.servings}</p>
-            <p>⏱️ Cooking Time: ${cookingTime} mins</p>
-            <p>📊 Difficulty: ${difficulty}</p>
-        </div>
-
-        <div class="recipe-section">
-            <h3>✨ Ingredients</h3>
-            <ul class="ingredients-list">
-                ${recipe.ingredients.split('|').map(ing => `
-                    <li>
-                        <label class="ingredient-item">
-                            <input type="checkbox" class="ingredient-checkbox">
-                            <span>${ing.trim()}</span>
-                        </label>
-                    </li>
-                `).join('')}
-            </ul>
-        </div>
-
-        <div class="recipe-section">
-            <h3>📝 Instructions</h3>
-            <ol class="instructions-list">
-                ${formatInstructions(recipe.instructions)}
-            </ol>
-        </div>
-
-        <div class="recipe-tips">
-            <h3>💡 Chef's Tips</h3>
-            <ul>
-                <li>Prep all ingredients before starting to cook</li>
-                <li>Keep an eye on temperature control</li>
-                <li>Taste and adjust seasonings as needed</li>
-            </ul>
-        </div>
-    `;
-
-    // Add ingredient checking functionality
-    const checkboxes = modalContent.querySelectorAll('.ingredient-checkbox');
-    checkboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', function() {
-            const label = this.parentElement;
-            if (this.checked) {
-                label.classList.add('checked');
-            } else {
-                label.classList.remove('checked');
-            }
-        });
+    // Sort recipes by matching ingredients count
+    matchingRecipes.sort((a, b) => {
+        const aMatches = a.ingredients.filter(ingredient =>
+            ingredients.includes(ingredient.toLowerCase())
+        ).length;
+        const bMatches = b.ingredients.filter(ingredient =>
+            ingredients.includes(ingredient.toLowerCase())
+        ).length;
+        return bMatches - aMatches;
     });
-}
 
-// Close modal
-function closeModal() {
-    modal.classList.remove('active');
-    setTimeout(() => modal.style.display = 'none', 300);
+    // Display matching recipes
+    matchingRecipes.forEach(recipe => {
+        const matchingIngredients = recipe.ingredients.filter(ingredient =>
+            ingredients.includes(ingredient.toLowerCase())
+        );
+        const missingIngredients = recipe.ingredients.filter(ingredient =>
+            !ingredients.includes(ingredient.toLowerCase())
+        );
+
+        const recipeCard = document.createElement('div');
+        recipeCard.className = 'recipe-card';
+        recipeCard.innerHTML = `
+            <h3>${recipe.name}</h3>
+            <div class="recipe-meta">
+                <span><i class="fas fa-clock"></i> ${recipe.prepTime}</span>
+                <span><i class="fas fa-signal"></i> ${recipe.difficulty}</span>
+            </div>
+            <p><strong>Matching Ingredients:</strong> ${matchingIngredients.join(', ')}</p>
+            ${missingIngredients.length > 0 ?
+                `<p><strong>Missing Ingredients:</strong> ${missingIngredients.join(', ')}</p>` :
+                '<p class="complete-match"><i class="fas fa-check-circle"></i> You have all the ingredients!</p>'
+            }
+            <p><strong>Instructions:</strong></p>
+            <p>${recipe.instructions.split('\n').join('<br>')}</p>
+        `;
+        recipesSection.appendChild(recipeCard);
+    });
+
+    // Scroll to recipes section
+    recipesSection.scrollIntoView({ behavior: 'smooth' });
 }
 
 // Event Listeners
-closeBtn.addEventListener('click', closeModal);
-
-window.addEventListener('click', (event) => {
-    if (event.target === modal) {
-        closeModal();
+document.addEventListener('DOMContentLoaded', function() {
+    // Add event listener for Enter key on ingredient input
+    const ingredientInput = document.getElementById('ingredientInput');
+    if (ingredientInput) {
+        ingredientInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                addIngredient();
+            }
+        });
     }
-});
 
-searchInput.addEventListener('keypress', (event) => {
-    if (event.key === 'Enter') {
-        event.preventDefault();
-        searchRecipes(searchInput.value);
+    // Add event listener for clear all button
+    const clearButton = document.getElementById('clearAll');
+    if (clearButton) {
+        clearButton.addEventListener('click', clearIngredients);
     }
-});
 
-// Add keyboard navigation
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        const previewModal = document.querySelector('.preview-modal');
-        if (previewModal && previewModal.classList.contains('active')) {
-            previewModal.classList.remove('active');
-        } else if (modal.style.display === 'flex') {
-            closeModal();
-        }
-    }
+    // Initialize empty ingredients list
+    updateIngredientsList();
 });
-
-// Initialize
-addPreviewModalStyles();
-showWelcomeScreen();
